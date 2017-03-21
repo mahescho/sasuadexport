@@ -1,0 +1,48 @@
+#!/usr/bin/env python
+
+import ldap
+
+SERVERURI = "ldaps://domaincontroller.local:3269"
+BINDDN    = "CN=ADREADUSER"
+BINDPW    = "secret"
+BASEDN    = "dc=domain, dc=local"
+SEARCH    = "(&(objectClass=user)(memberOf=CN=GroupName))"
+SASUROL   = "Role-Datenschleuse-PrintDownloadUploadVncAutodownloadDirectprint"
+OUTFILE   = "/var/persistent/user-import/sasu-user.xml"
+
+ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+
+l = ldap.initialize(SERVERURI)
+try:
+  l.protocol_version = ldap.VERSION3
+  l.set_option(ldap.OPT_REFERRALS, 0)
+
+  bind = l.simple_bind_s(BINDDN, BINDPW)
+
+  attributes = ['displayName', 'mail']
+  result = l.search_s(BASEDN, ldap.SCOPE_SUBTREE, SEARCH, attributes)
+
+  results = [entry for dn, entry in result if isinstance(entry, dict)]
+
+  # Format Template
+
+  #<?xml version='1.0' encoding='utf-8'?>
+  #<safesurfer sasu='http://www.secunet.com/safesurfer/sasu-user'>
+  #<user email="test_benutzer@somehost.domain.de">
+  #<group name="Gueltige-Rolle"/>
+  #</user>
+  #</safesurfer>
+
+  f = open(OUTFILE, "w")
+  f.write("<?xml version='1.0' encoding='utf-8'?>\n")
+  f.write("<safesurfer sasu='http://www.secunet.com/safesurfer/sasu-user'>\n")
+  for r in results:
+    if 'mail' in r:
+      f.write('<user email="%s">\n' % r['mail'][0])
+      f.write('<group name="%s"/>\n' % SASUROL)
+      f.write("</user>\n")
+  f.write("</safesurfer>\n")
+  f.close()
+
+finally:
+    l.unbind()
